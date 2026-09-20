@@ -378,17 +378,18 @@
   .saved-row{
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
     padding: 10px 0;
     border-bottom: 1px solid var(--line);
   }
   .saved-row:last-child{ border-bottom: none; }
-  .saved-row .info{ flex: 1; min-width: 0; }
+  .saved-row .info{ flex: 1 1 100%; min-width: 0; }
   .saved-row .info .t{ font-weight: 700; font-size: 14px; word-break: break-word; }
   .saved-row .info .d{ font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
   .saved-row button{
-    flex: none;
-    padding: 7px 10px;
+    flex: 1;
+    padding: 6px 4px;
     border-radius: 8px;
     border: 1px solid var(--line);
     background: var(--panel-2);
@@ -1009,6 +1010,7 @@
         '<div class="saved-row">' +
           '<div class="info"><div class="t">' + escapeHtml(g.name || '無題') + '</div>' +
           '<div class="d">' + (g.items || []).length + '個のアイテム</div></div>' +
+          '<button data-edit="' + g.id + '">編集</button>' +
           '<button data-use="' + g.id + '">作成</button>' +
           '<button class="danger" data-delg="' + g.id + '">削除</button>' +
         '</div>'
@@ -1016,7 +1018,15 @@
     }
     modalBody.innerHTML = html;
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-    document.getElementById('newGroupBtn').addEventListener('click', renderGroupForm);
+    document.getElementById('newGroupBtn').addEventListener('click', () => renderGroupForm());
+    modalBody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const groups = loadJSON(GROUP_KEY);
+        const g = groups.find(x => x.id === btn.dataset.edit);
+        if(!g) return;
+        renderGroupForm(g);
+      });
+    });
     modalBody.querySelectorAll('[data-use]').forEach(btn => {
       btn.addEventListener('click', () => {
         const groups = loadJSON(GROUP_KEY);
@@ -1052,25 +1062,37 @@
     });
   }
 
-  function renderGroupForm(){
-    let html = '<div class="modal-title"><span>新しいグループを作る</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+  function renderGroupForm(existingGroup){
+    const isEdit = !!existingGroup;
+    let html = '<div class="modal-title"><span>' + (isEdit ? 'グループを編集' : '新しいグループを作る') + '</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
     html += '<div class="form-field"><label>グループ名</label><input type="text" id="groupNameInput" placeholder="例：推しキャラ一覧"></div>';
     html += '<div class="form-field"><label>アイテム（1行に1つずつ入力）</label><textarea id="groupItemsInput" placeholder="アイテム1\nアイテム2\nアイテム3"></textarea></div>';
     html += '<div class="form-actions"><button id="groupCancelBtn">戻る</button><button class="primary" id="groupSaveBtn">保存</button></div>';
     modalBody.innerHTML = html;
+    const nameInput = document.getElementById('groupNameInput');
+    const itemsInput = document.getElementById('groupItemsInput');
+    if(isEdit){
+      nameInput.value = existingGroup.name || '';
+      itemsInput.value = (existingGroup.items || []).join('\n');
+    }
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
     document.getElementById('groupCancelBtn').addEventListener('click', renderGroupsModal);
     document.getElementById('groupSaveBtn').addEventListener('click', () => {
-      const nameInput = document.getElementById('groupNameInput');
-      const itemsInput = document.getElementById('groupItemsInput');
       const name = nameInput.value.trim();
       const items = itemsInput.value.split('\n').map(s => s.trim()).filter(Boolean);
       if(!name){ showToast('グループ名を入力してください'); nameInput.focus(); return; }
       if(items.length === 0){ showToast('アイテムを1つ以上入力してください'); itemsInput.focus(); return; }
       const groups = loadJSON(GROUP_KEY);
-      groups.push({ id: 'group-' + Date.now(), name, items, createdAt: Date.now() });
+      if(isEdit){
+        const idx = groups.findIndex(x => x.id === existingGroup.id);
+        if(idx !== -1){
+          groups[idx] = Object.assign({}, groups[idx], { name, items });
+        }
+      } else {
+        groups.push({ id: 'group-' + Date.now(), name, items, createdAt: Date.now() });
+      }
       if(!saveJSON(GROUP_KEY, groups)){ showToast('保存容量が足りず保存できませんでした'); return; }
-      showToast('グループを保存しました');
+      showToast(isEdit ? 'グループを更新しました' : 'グループを保存しました');
       renderGroupsModal();
     });
   }
