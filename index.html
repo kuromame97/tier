@@ -28,7 +28,7 @@
     font-family: var(--font-body);
     overscroll-behavior-y: contain;
   }
-  body{ padding-top: 6px; padding-bottom: 132px; transition: padding-bottom .15s; }
+  body{ padding-top: 6px; padding-bottom: 180px; transition: padding-bottom .15s; }
   body.pad-open{ padding-bottom: 212px; }
 
   /* ---------- Floating mode toggle (single round button, always visible) ---------- */
@@ -428,6 +428,58 @@
   }
   .form-actions button.primary{ background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
+  /* ---------- Roulette ---------- */
+  .roulette-card{
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel-2);
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+  .roulette-head{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .roulette-title{ font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+  .roulette-toggle{ font-size: 11px; color: var(--ink-dim); display: flex; align-items: center; gap: 4px; }
+  .roulette-toggle input{ accent-color: var(--accent); }
+  .roulette-result{
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 700;
+    text-align: center;
+    padding: 16px 8px;
+    border-radius: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    margin-bottom: 10px;
+    color: var(--accent);
+    word-break: break-word;
+  }
+  .roulette-chips{ display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  .roulette-chip{
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .roulette-chip.used{ text-decoration: line-through; opacity: .45; }
+  .roulette-history{ font-size: 11px; color: var(--ink-dim); margin-top: 8px; word-break: break-word; }
+  .roulette-combo{
+    border: 1px dashed var(--accent);
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .combo-label{ font-size: 12px; color: var(--ink-dim); margin-bottom: 4px; }
+  .combo-value{ font-family: var(--font-display); font-size: 18px; font-weight: 700; word-break: break-word; }
+
   /* ---------- Confirm / prompt dialog (custom, replaces native confirm/prompt) ---------- */
   #confirmOverlay{
     position: fixed; inset: 0;
@@ -485,7 +537,10 @@
       <button id="groupsBtn">🗂 グループから作成</button>
     </div>
     <div class="actionbar-row">
+      <button id="rouletteBtn">🎡 ルーレット</button>
       <button id="resetBtn">リセット</button>
+    </div>
+    <div class="actionbar-row">
       <button id="saveBtn">画像として保存</button>
     </div>
   </div>
@@ -1099,6 +1154,211 @@
 
   document.getElementById('savedListBtn').addEventListener('click', openSavedModal);
   document.getElementById('groupsBtn').addEventListener('click', openGroupsModal);
+
+  /* ---------- Roulette ---------- */
+  const roulettes = [
+    { title: 'ルーレット1', items: ['候補A', '候補B', '候補C'], used: [], excludeUsed: true, history: [], lastResult: null, spinning: false },
+    { title: 'ルーレット2', items: ['候補X', '候補Y', '候補Z'], used: [], excludeUsed: true, history: [], lastResult: null, spinning: false },
+  ];
+
+  function openRouletteModal(){ renderRouletteModal(); showModal(); }
+
+  function activeRouletteItems(r){
+    return r.items.filter(it => !(r.excludeUsed && r.used.includes(it)));
+  }
+
+  function renderRouletteCardInner(r, i){
+    const active = activeRouletteItems(r);
+    const chips = r.items.map(it => {
+      const isUsed = r.excludeUsed && r.used.includes(it);
+      return '<span class="roulette-chip' + (isUsed ? ' used' : '') + '">' + escapeHtml(it) + '</span>';
+    }).join('');
+    let html = '<div class="roulette-head">' +
+        '<span class="roulette-title">' + escapeHtml(r.title) + '</span>' +
+        '<label class="roulette-toggle"><input type="checkbox" id="rouletteExclude' + i + '" ' + (r.excludeUsed ? 'checked' : '') + '> 使用済みを除外</label>' +
+      '</div>' +
+      '<div class="roulette-result" id="rouletteResult' + i + '">' +
+        (r.lastResult ? escapeHtml(r.lastResult) : (active.length ? 'スピンして決めよう' : '候補がありません')) +
+      '</div>' +
+      '<div class="roulette-chips">' + (chips || '<span class="empty-note" style="padding:4px 0;">候補がありません</span>') + '</div>' +
+      '<div class="form-actions">' +
+        '<button id="rouletteEdit' + i + '">編集</button>' +
+        '<button id="rouletteLoad' + i + '">グループ読込</button>' +
+      '</div>' +
+      '<div class="form-actions" style="margin-top:6px;">' +
+        '<button id="rouletteReset' + i + '">リセット</button>' +
+        '<button class="primary" id="rouletteSpin' + i + '">🎲 スピン</button>' +
+      '</div>';
+    if(r.history.length){
+      html += '<div class="roulette-history">履歴：' + r.history.slice(0, 5).map(escapeHtml).join(' / ') + '</div>';
+    }
+    return html;
+  }
+
+  function renderComboSection(){
+    const results = roulettes.map(r => r.lastResult).filter(Boolean);
+    if(results.length === 0) return '';
+    return '<div class="roulette-combo">' +
+      '<div class="combo-label">組み合わせ</div>' +
+      '<div class="combo-value">' + escapeHtml(results.join(' × ')) + '</div>' +
+      '<button class="modal-primary-btn" id="addComboBtn" style="margin-top:10px; margin-bottom:0;">＋ アイテム置き場に追加</button>' +
+    '</div>';
+  }
+
+  function wireRouletteCard(i){
+    const r = roulettes[i];
+    const exclude = document.getElementById('rouletteExclude' + i);
+    if(exclude) exclude.addEventListener('change', () => {
+      r.excludeUsed = exclude.checked;
+      refreshRouletteCard(i);
+    });
+    const editBtn = document.getElementById('rouletteEdit' + i);
+    if(editBtn) editBtn.addEventListener('click', () => renderRouletteEditForm(i));
+    const loadBtn = document.getElementById('rouletteLoad' + i);
+    if(loadBtn) loadBtn.addEventListener('click', () => renderRouletteGroupPicker(i));
+    const resetBtn = document.getElementById('rouletteReset' + i);
+    if(resetBtn) resetBtn.addEventListener('click', () => {
+      r.used = [];
+      r.lastResult = null;
+      refreshRouletteCard(i);
+      refreshCombo();
+    });
+    const spinBtn = document.getElementById('rouletteSpin' + i);
+    if(spinBtn) spinBtn.addEventListener('click', () => spinRoulette(i));
+  }
+
+  function wireCombo(){
+    const btn = document.getElementById('addComboBtn');
+    if(!btn) return;
+    btn.addEventListener('click', () => {
+      const results = roulettes.map(r => r.lastResult).filter(Boolean);
+      if(results.length === 0) return;
+      addItemToPool(results.join(' × '));
+      showToast('アイテム置き場に追加しました');
+    });
+  }
+
+  function refreshRouletteCard(i){
+    const card = document.getElementById('rouletteCard' + i);
+    if(!card) return;
+    card.innerHTML = renderRouletteCardInner(roulettes[i], i);
+    wireRouletteCard(i);
+  }
+
+  function refreshCombo(){
+    const el = document.getElementById('rouletteCombo');
+    if(!el) return;
+    el.innerHTML = renderComboSection();
+    wireCombo();
+  }
+
+  function renderRouletteModal(){
+    let html = '<div class="modal-title"><span>🎡 ルーレット</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    roulettes.forEach((r, i) => {
+      html += '<div class="roulette-card" id="rouletteCard' + i + '">' + renderRouletteCardInner(r, i) + '</div>';
+    });
+    html += '<div id="rouletteCombo">' + renderComboSection() + '</div>';
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    roulettes.forEach((r, i) => wireRouletteCard(i));
+    wireCombo();
+  }
+
+  function spinRoulette(i){
+    const r = roulettes[i];
+    if(r.spinning) return;
+    const active = activeRouletteItems(r);
+    if(active.length === 0){ showToast('候補がありません。編集で追加するか、リセットしてください'); return; }
+    r.spinning = true;
+    const spinBtn = document.getElementById('rouletteSpin' + i);
+    if(spinBtn) spinBtn.disabled = true;
+
+    const winnerIdx = Math.floor(Math.random() * active.length);
+    const loops = 3;
+    const totalSteps = loops * active.length + winnerIdx + 1;
+    let step = 0;
+    let delay = 55;
+
+    function tick(){
+      const resultEl = document.getElementById('rouletteResult' + i);
+      const idx = step % active.length;
+      if(resultEl) resultEl.textContent = active[idx];
+      step++;
+      if(step >= totalSteps){
+        finish();
+        return;
+      }
+      delay = Math.min(delay * 1.14, 260);
+      setTimeout(tick, delay);
+    }
+
+    function finish(){
+      const winner = active[winnerIdx];
+      r.lastResult = winner;
+      r.history.unshift(winner);
+      if(r.excludeUsed) r.used.push(winner);
+      r.spinning = false;
+      refreshRouletteCard(i);
+      refreshCombo();
+      showToast(r.title + '：「' + winner + '」');
+    }
+
+    tick();
+  }
+
+  function renderRouletteEditForm(i){
+    const r = roulettes[i];
+    let html = '<div class="modal-title"><span>' + escapeHtml(r.title) + 'を編集</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<div class="form-field"><label>候補（1行に1つずつ入力）</label><textarea id="rouletteItemsInput" placeholder="候補1\n候補2\n候補3"></textarea></div>';
+    html += '<div class="form-actions"><button id="rouletteEditCancelBtn">戻る</button><button class="primary" id="rouletteEditSaveBtn">保存</button></div>';
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    const itemsInput = document.getElementById('rouletteItemsInput');
+    itemsInput.value = r.items.join('\n');
+    document.getElementById('rouletteEditCancelBtn').addEventListener('click', renderRouletteModal);
+    document.getElementById('rouletteEditSaveBtn').addEventListener('click', () => {
+      const items = itemsInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+      if(items.length === 0){ showToast('候補を1つ以上入力してください'); itemsInput.focus(); return; }
+      r.items = items;
+      r.used = r.used.filter(u => items.includes(u));
+      if(r.lastResult && !items.includes(r.lastResult)) r.lastResult = null;
+      renderRouletteModal();
+      showToast('候補を更新しました');
+    });
+  }
+
+  function renderRouletteGroupPicker(i){
+    const groups = loadJSON(GROUP_KEY);
+    let html = '<div class="modal-title"><span>グループから読み込む</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    if(groups.length === 0){
+      html += '<p class="empty-note">まだグループがありません</p>';
+    } else {
+      html += groups.slice().reverse().map(g => (
+        '<div class="saved-row">' +
+          '<div class="info"><div class="t">' + escapeHtml(g.name || '無題') + '</div>' +
+          '<div class="d">' + (g.items || []).length + '個のアイテム</div></div>' +
+          '<button data-pick-g="' + g.id + '">これを使う</button>' +
+        '</div>'
+      )).join('');
+    }
+    html += '<div class="form-actions" style="margin-top:8px;"><button id="rouletteGroupBackBtn">戻る</button></div>';
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('rouletteGroupBackBtn').addEventListener('click', renderRouletteModal);
+    modalBody.querySelectorAll('[data-pick-g]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const g = groups.find(x => x.id === btn.dataset.pickG);
+        if(!g) return;
+        roulettes[i].items = (g.items || []).slice();
+        roulettes[i].used = [];
+        roulettes[i].lastResult = null;
+        renderRouletteModal();
+        showToast('「' + g.name + '」を読み込みました');
+      });
+    });
+  }
+
+  document.getElementById('rouletteBtn').addEventListener('click', openRouletteModal);
 
   /* ---------- Save as image ---------- */
   function fallbackDownload(dataUrl, fileName){
