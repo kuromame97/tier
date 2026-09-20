@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ティア表メーカー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Kaisei+Decol:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --bg: #17161c;
+    --panel: #211f28;
+    --panel-2: #2b2833;
+    --line: #3a3742;
+    --ink: #f1eef7;
+    --ink-dim: #9a96a8;
+    --accent: #ffb100;
+    --accent-ink: #1a1400;
+    --danger: #ff5d6c;
+    --radius: 10px;
+    --font-display: "Kaisei Decol", serif;
+    --font-body: "Zen Kaku Gothic New", sans-serif;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-body);
+    overscroll-behavior-y: contain;
+  }
+  body{ padding-top: 6px; padding-bottom: 132px; transition: padding-bottom .15s; }
+  body.pad-open{ padding-bottom: 212px; }
+
+  /* ---------- Floating mode toggle (single round button, always visible) ---------- */
+  #modeFab{
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    right: 10px;
+    z-index: 70;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--ink);
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  }
+  #modeFab.edit-active{
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  body.mode-edit .item .txt,
+  body.mode-edit .tier-label .name,
+  body.mode-edit #title{
+    background: rgba(255,177,0,.12);
+    border-radius: 3px;
+    cursor: text;
+  }
+  body.mode-move .item{ cursor: pointer; }
+  body.mode-move .tier-label{ cursor: pointer; }
+
+  /* ---------- Header ---------- */
+  header{
+    padding: 16px 14px 10px;
+    background: linear-gradient(180deg, #1d1c24, var(--bg));
+    border-bottom: 1px solid var(--line);
+  }
+  .brand{
+    font-family: var(--font-display);
+    font-size: 12px;
+    letter-spacing: .18em;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  #title{
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.3;
+    outline: none;
+    border-bottom: 2px dashed transparent;
+    padding: 2px 0;
+    word-break: break-word;
+  }
+  #title:focus{ border-bottom-color: var(--accent); }
+  #title:empty::before{ content: attr(data-placeholder); color: var(--ink-dim); }
+
+  .hint{
+    padding: 10px 12px 8px;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+
+  /* ---------- Board ---------- */
+  #board{ padding: 14px 10px 4px; }
+
+  .tier-row{
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 10px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .tier-row.selected{ box-shadow: 0 0 0 2px var(--accent) inset; }
+
+  .tier-label{
+    flex: 0 0 92px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 4px;
+    position: relative;
+    color: var(--accent-ink);
+  }
+  .tier-label .name{
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    outline: none;
+    text-align: center;
+    max-width: 84px;
+    word-break: break-word;
+    line-height: 1.15;
+  }
+  .tier-label .swatch-btn{
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,.35);
+    background: rgba(255,255,255,.55);
+    padding: 0;
+  }
+  .tier-label input[type=color]{
+    position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+  }
+  .tier-del{
+    position: absolute; top: 3px; right: 3px;
+    width: 18px; height: 18px; line-height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,.28);
+    color: #fff;
+    font-size: 12px;
+    padding: 0;
+  }
+
+  .tier-items{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .lane{
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    gap: 4px;
+    min-height: 27px;
+    padding: 3px 8px;
+    border-bottom: 1px dashed rgba(255,255,255,.07);
+    background: var(--panel);
+  }
+  .lane:last-child{ border-bottom: none; }
+
+  .item{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 7px;
+    max-width: 100%;
+  }
+  .item.selected{ box-shadow: 0 0 0 2px var(--accent); }
+  .item .txt{
+    outline: none;
+    font-size: 12.5px;
+    font-weight: 500;
+    min-width: 8px;
+    max-width: 130px;
+    word-break: break-word;
+    line-height: 1.2;
+  }
+  .item .txt:empty::before{ content: "無題"; color: var(--ink-dim); }
+  .item .rm{
+    flex: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: none;
+    background: #453f52;
+    color: var(--ink-dim);
+    font-size: 9px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .add-tier-btn{
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px;
+    border-radius: var(--radius);
+    border: 1px dashed var(--line);
+    background: transparent;
+    color: var(--ink-dim);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .add-tier-btn:active{ background: var(--panel); }
+
+  /* ---------- Pool ---------- */
+  #pool-section{ padding: 4px 10px 14px; }
+  .pool-head{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 2px 8px;
+    font-size: 13px;
+    color: var(--ink-dim);
+  }
+  .pool-head .add-item-btn{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-body);
+  }
+  #pool{
+    min-height: 70px;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+    padding: 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  /* ---------- Bottom action bar ---------- */
+  #actionbar{
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(23,22,28,.94);
+    backdrop-filter: blur(6px);
+    border-top: 1px solid var(--line);
+  }
+  .actionbar-row{ display: flex; gap: 8px; }
+  .actionbar-row + .actionbar-row{ margin-top: 8px; }
+  #actionbar button{
+    flex: 1;
+    padding: 11px 6px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 13px;
+  }
+  #saveBtn{ background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  #resetBtn{ background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+
+  #movePad{ display: none; flex-direction: column; align-items: center; gap: 6px; }
+  #selInfo{
+    font-size: 12px;
+    color: var(--ink-dim);
+    max-width: 260px;
+    text-align: center;
+    word-break: break-word;
+  }
+  .dpad{
+    display: grid;
+    grid-template-columns: 46px 58px 46px;
+    grid-template-rows: 38px 38px 38px;
+    gap: 5px;
+  }
+  .dbtn{
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--ink);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0;
+  }
+  .dbtn:disabled{ opacity: .25; }
+  .dbtn.ok{
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 13px;
+    border-color: var(--accent);
+  }
+  #upBtn{ grid-column: 2; grid-row: 1; }
+  #leftBtn{ grid-column: 1; grid-row: 2; }
+  #okBtn{ grid-column: 2; grid-row: 2; }
+  #rightBtn{ grid-column: 3; grid-row: 2; }
+  #downBtn{ grid-column: 2; grid-row: 3; }
+
+  #toast{
+    position: fixed;
+    left: 50%; bottom: 78px;
+    transform: translateX(-50%) translateY(10px);
+    background: #fff; color: #17161c;
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 300;
+    white-space: nowrap;
+    max-width: 88vw;
+    text-align: center;
+  }
+  #toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- Modal ---------- */
+  #modalOverlay{
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 200;
+  }
+  #modalOverlay.show{ display: flex; }
+  .modal-sheet{
+    width: 100%;
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-radius: 16px 16px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    border: 1px solid var(--line);
+    border-bottom: none;
+  }
+  .modal-title{
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-close{ background: none; border: none; color: var(--ink-dim); font-size: 20px; padding: 2px 8px; }
+  .modal-primary-btn{
+    width: 100%;
+    padding: 11px;
+    border-radius: 10px;
+    border: 1px dashed var(--accent);
+    background: rgba(255,177,0,.08);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+    font-family: var(--font-body);
+    margin-bottom: 12px;
+  }
+  .saved-row{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .saved-row:last-child{ border-bottom: none; }
+  .saved-row .info{ flex: 1; min-width: 0; }
+  .saved-row .info .t{ font-weight: 700; font-size: 14px; word-break: break-word; }
+  .saved-row .info .d{ font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .saved-row button{
+    flex: none;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-body);
+  }
+  .saved-row button.danger{ color: var(--danger); border-color: var(--danger); background: transparent; }
+  .empty-note{ color: var(--ink-dim); font-size: 13px; padding: 14px 4px; text-align: center; }
+
+  .form-field{ margin-bottom: 12px; }
+  .form-field label{ display: block; font-size: 12px; color: var(--ink-dim); margin-bottom: 4px; }
+  .form-field input[type=text], .form-field textarea{
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 9px 10px;
+  }
+  .form-field textarea{ min-height: 120px; resize: vertical; line-height: 1.5; }
+  .form-actions{ display: flex; gap: 8px; margin-top: 4px; }
+  .form-actions button{
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    font-family: var(--font-body);
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--ink);
+  }
+  .form-actions button.primary{ background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+  /* ---------- Confirm / prompt dialog (custom, replaces native confirm/prompt) ---------- */
+  #confirmOverlay{
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 250;
+    padding: 20px;
+  }
+  #confirmOverlay.show{ display: flex; }
+  .confirm-box{
+    width: 100%;
+    max-width: 340px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .confirm-box p{ font-size: 14px; line-height: 1.5; margin: 0 0 14px; }
+  .confirm-box .form-field{ margin-bottom: 14px; }
+</style>
+</head>
+<body class="mode-move">
+
+<button id="modeFab" aria-label="移動モード中（タップで編集モードに切り替え）">✋</button>
+
+<div id="captureArea">
+  <header>
+    <p class="brand">TIER MAKER</p>
+    <div id="title" contenteditable="false" data-placeholder="ティア表のタイトルを入力"></div>
+  </header>
+
+  <div id="board"></div>
+</div>
+
+<div style="padding:0 10px;">
+  <button class="add-tier-btn" id="addTierBtn">＋ ランクを追加</button>
+</div>
+
+<p class="hint" id="hintText"></p>
+
+<div id="pool-section">
+  <div class="pool-head">
+    <span>アイテム置き場</span>
+    <button class="add-item-btn" id="addItemBtn">＋ アイテム追加</button>
+  </div>
+  <div id="pool"></div>
+</div>
+
+<div id="actionbar">
+  <div id="actionButtons">
+    <div class="actionbar-row">
+      <button id="savedListBtn">📋 保存済み一覧</button>
+      <button id="groupsBtn">🗂 グループから作成</button>
+    </div>
+    <div class="actionbar-row">
+      <button id="resetBtn">リセット</button>
+      <button id="saveBtn">画像として保存</button>
+    </div>
+  </div>
+  <div id="movePad">
+    <span id="selInfo"></span>
+    <div class="dpad">
+      <button class="dbtn" id="upBtn" aria-label="上へ移動">↑</button>
+      <button class="dbtn" id="leftBtn" aria-label="左へ移動">←</button>
+      <button class="dbtn ok" id="okBtn" aria-label="決定">決定</button>
+      <button class="dbtn" id="rightBtn" aria-label="右へ移動">→</button>
+      <button class="dbtn" id="downBtn" aria-label="下へ移動">↓</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="modalOverlay">
+  <div class="modal-sheet" id="modalBody"></div>
+</div>
+
+<div id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMessage"></p>
+    <div class="form-field" id="confirmInputWrap" style="display:none;">
+      <input type="text" id="confirmInput">
+    </div>
+    <div class="form-actions">
+      <button id="confirmCancelBtn">キャンセル</button>
+      <button class="primary" id="confirmOkBtn">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const LANES = 5;
+  const DEFAULT_TIERS = [
+    { name: "S", color: "#ff6b6b" },
+    { name: "A", color: "#ffb100" },
+    { name: "B", color: "#ffe066" },
+    { name: "C", color: "#8ce99a" },
+    { name: "D", color: "#74c0fc" },
+  ];
+  const DEFAULT_ITEMS = ["アイテム1", "アイテム2", "アイテム3", "アイテム4"];
+  const SAVE_KEY = 'tierMakerSavedLists_v1';
+  const GROUP_KEY = 'tierMakerGroups_v1';
+
+  const board = document.getElementById('board');
+  const pool = document.getElementById('pool');
+  const titleEl = document.getElementById('title');
+  const actionButtons = document.getElementById('actionButtons');
+  const movePad = document.getElementById('movePad');
+  const selInfo = document.getElementById('selInfo');
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  const modalOverlay = document.getElementById('modalOverlay');
+  const modalBody = document.getElementById('modalBody');
+
+  let tierSeq = 0;
+  let itemSeq = 0;
+  let mode = 'move';
+  let selected = null; // { type: 'item'|'rank', el }
+
+  const HINTS = {
+    move: 'アイテムやランク名をタップして選択し、下の矢印ボタンで動かせます。↑↓でランク間・段間の移動、←→で同じ段の中の順番を変えられます。',
+    edit: 'タイトル・ランク名・アイテム名をタップすると、そのまま文字を編集できます。並べ替えたいときは「移動モード」に戻してください。'
+  };
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function blurOnEnter(e){
+    if(e.key === 'Enter'){ e.preventDefault(); e.target.blur(); }
+  }
+
+  /* ---------- Storage helpers ---------- */
+  function loadJSON(key){
+    try{ return JSON.parse(localStorage.getItem(key) || '[]'); }catch(e){ return []; }
+  }
+  function saveJSON(key, val){
+    try{ localStorage.setItem(key, JSON.stringify(val)); return true; }catch(e){ return false; }
+  }
+
+  /* ---------- Selection ---------- */
+  function clearSelectionStyles(){
+    document.querySelectorAll('.item.selected').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.tier-row.selected').forEach(el => el.classList.remove('selected'));
+  }
+
+  function deselectAll(){
+    selected = null;
+    clearSelectionStyles();
+    movePad.style.display = 'none';
+    actionButtons.style.display = 'block';
+    document.body.classList.remove('pad-open');
+  }
+
+  function selectItem(item){
+    if(selected && selected.el === item){ deselectAll(); return; }
+    clearSelectionStyles();
+    selected = { type: 'item', el: item };
+    item.classList.add('selected');
+    selInfo.textContent = '選択中：' + (item.querySelector('.txt').textContent || '無題');
+    leftBtn.disabled = false;
+    rightBtn.disabled = false;
+    movePad.style.display = 'flex';
+    actionButtons.style.display = 'none';
+    document.body.classList.add('pad-open');
+  }
+
+  function selectRank(row){
+    if(selected && selected.el === row){ deselectAll(); return; }
+    clearSelectionStyles();
+    selected = { type: 'rank', el: row };
+    row.classList.add('selected');
+    const name = row.querySelector('.tier-label .name').textContent || '無題';
+    selInfo.textContent = '選択中のランク：' + name;
+    leftBtn.disabled = true;
+    rightBtn.disabled = true;
+    movePad.style.display = 'flex';
+    actionButtons.style.display = 'none';
+    document.body.classList.add('pad-open');
+  }
+
+  /* ---------- Movement ---------- */
+  function getVerticalSequence(){
+    const seq = [];
+    document.querySelectorAll('.tier-row').forEach(row => {
+      row.querySelectorAll('.lane').forEach(lane => seq.push(lane));
+    });
+    seq.push(pool);
+    return seq;
+  }
+
+  function scrollToReveal(el){
+    const rect = el.getBoundingClientRect();
+    const topMargin = 92;    // roughly 3 lane-heights of breathing room above
+    const bottomMargin = 30;
+    const viewH = window.innerHeight;
+    if(rect.top < topMargin){
+      window.scrollBy({ top: rect.top - topMargin, behavior: 'smooth' });
+    } else if(rect.bottom > viewH - bottomMargin){
+      window.scrollBy({ top: rect.bottom - (viewH - bottomMargin), behavior: 'smooth' });
+    }
+  }
+
+  function moveItemVertical(item, delta){
+    const seq = getVerticalSequence();
+    const idx = seq.indexOf(item.parentElement);
+    const targetIdx = idx + delta;
+    if(idx === -1 || targetIdx < 0 || targetIdx >= seq.length) return;
+    seq[targetIdx].appendChild(item);
+    scrollToReveal(item);
+  }
+
+  function swapLeft(item){
+    const prev = item.previousElementSibling;
+    if(prev) item.parentElement.insertBefore(item, prev);
+  }
+  function swapRight(item){
+    const next = item.nextElementSibling;
+    if(next) item.parentElement.insertBefore(next, item);
+  }
+
+  function moveRank(row, delta){
+    if(delta < 0){
+      const prev = row.previousElementSibling;
+      if(prev) board.insertBefore(row, prev);
+    } else {
+      const next = row.nextElementSibling;
+      if(next) board.insertBefore(next, row);
+    }
+    scrollToReveal(row);
+  }
+
+  function handleArrow(dir){
+    if(!selected) return;
+    if(selected.type === 'item'){
+      if(dir === 'up') moveItemVertical(selected.el, -1);
+      else if(dir === 'down') moveItemVertical(selected.el, 1);
+      else if(dir === 'left') swapLeft(selected.el);
+      else if(dir === 'right') swapRight(selected.el);
+    } else if(selected.type === 'rank'){
+      if(dir === 'up') moveRank(selected.el, -1);
+      else if(dir === 'down') moveRank(selected.el, 1);
+    }
+  }
+
+  document.getElementById('upBtn').addEventListener('click', () => handleArrow('up'));
+  document.getElementById('downBtn').addEventListener('click', () => handleArrow('down'));
+  document.getElementById('leftBtn').addEventListener('click', () => handleArrow('left'));
+  document.getElementById('rightBtn').addEventListener('click', () => handleArrow('right'));
+  document.getElementById('okBtn').addEventListener('click', () => deselectAll());
+
+  /* ---------- Items ---------- */
+  function makeItem(text){
+    itemSeq++;
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.dataset.id = 'item-' + itemSeq;
+    el.innerHTML =
+      '<span class="txt">' + escapeHtml(text || '') + '</span>' +
+      '<button class="rm" aria-label="削除">✕</button>';
+    const txt = el.querySelector('.txt');
+    txt.contentEditable = (mode === 'edit') ? 'true' : 'false';
+    txt.addEventListener('keydown', blurOnEnter);
+    el.querySelector('.rm').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const label = txt.textContent.trim() || '無題';
+      showDialog({
+        message: '「' + label + '」を削除しますか？',
+        onOk: () => {
+          if(selected && selected.el === el) deselectAll();
+          el.remove();
+        }
+      });
+    });
+    el.addEventListener('click', (e) => {
+      if(mode !== 'move') return;
+      if(e.target.closest('.rm')) return;
+      selectItem(el);
+    });
+    return el;
+  }
+
+  function addItemToPool(text){
+    pool.appendChild(makeItem(text));
+  }
+
+  /* ---------- Tiers ---------- */
+  function makeTierRow(name, color){
+    tierSeq++;
+    const row = document.createElement('div');
+    row.className = 'tier-row';
+    row.dataset.id = 'tier-' + tierSeq;
+
+    const label = document.createElement('div');
+    label.className = 'tier-label';
+    label.style.background = color;
+    label.dataset.color = color;
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'tier-del';
+    delBtn.textContent = '✕';
+    delBtn.title = 'ランクを削除';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const items = row.querySelectorAll('.item');
+      items.forEach(it => {
+        if(selected && selected.el === it) deselectAll();
+        pool.appendChild(it);
+      });
+      if(selected && selected.el === row) deselectAll();
+      row.remove();
+    });
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'name';
+    nameEl.contentEditable = (mode === 'edit') ? 'true' : 'false';
+    nameEl.textContent = name;
+    nameEl.addEventListener('keydown', blurOnEnter);
+
+    const swatchWrap = document.createElement('label');
+    swatchWrap.className = 'swatch-btn';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = color;
+    colorInput.addEventListener('click', (e) => e.stopPropagation());
+    colorInput.addEventListener('input', () => {
+      label.style.background = colorInput.value;
+      label.dataset.color = colorInput.value;
+    });
+    swatchWrap.appendChild(colorInput);
+    swatchWrap.style.setProperty('background', 'radial-gradient(circle, #fff8 40%, #fff2 41%)');
+
+    label.appendChild(delBtn);
+    label.appendChild(nameEl);
+    label.appendChild(swatchWrap);
+    label.addEventListener('click', (e) => {
+      if(mode !== 'move') return;
+      if(e.target.closest('.tier-del') || e.target.closest('.swatch-btn')) return;
+      selectRank(row);
+    });
+
+    const items = document.createElement('div');
+    items.className = 'tier-items';
+    for(let i = 0; i < LANES; i++){
+      const lane = document.createElement('div');
+      lane.className = 'lane';
+      items.appendChild(lane);
+    }
+
+    row.appendChild(label);
+    row.appendChild(items);
+    return { row, items };
+  }
+
+  function addTier(name, color){
+    const { row } = makeTierRow(name || '新ランク', color || randomColor());
+    board.appendChild(row);
+  }
+
+  function randomColor(){
+    const palette = ['#ff8787','#ffa94d','#ffd43b','#94d82d','#63e6be','#4dabf7','#9775fa','#f783ac'];
+    return palette[Math.floor(Math.random() * palette.length)];
+  }
+
+  /* ---------- Serialize / Load full state ---------- */
+  function serializeCurrent(){
+    const tiers = Array.from(board.querySelectorAll('.tier-row')).map(row => {
+      const label = row.querySelector('.tier-label');
+      const name = row.querySelector('.tier-label .name').textContent;
+      const color = label.dataset.color || '#ffb100';
+      const lanes = Array.from(row.querySelectorAll('.lane')).map(lane =>
+        Array.from(lane.querySelectorAll('.item .txt')).map(t => t.textContent)
+      );
+      return { name, color, lanes };
+    });
+    const poolItems = Array.from(pool.querySelectorAll('.item .txt')).map(t => t.textContent);
+    return { title: titleEl.textContent || '', tiers, pool: poolItems };
+  }
+
+  function loadState(state){
+    deselectAll();
+    board.innerHTML = '';
+    pool.innerHTML = '';
+    titleEl.textContent = state.title || '';
+    (state.tiers || []).forEach(t => {
+      const { row } = makeTierRow(t.name || '', t.color || randomColor());
+      board.appendChild(row);
+      const lanes = row.querySelectorAll('.lane');
+      (t.lanes || []).forEach((laneItems, i) => {
+        if(!lanes[i]) return;
+        (laneItems || []).forEach(text => lanes[i].appendChild(makeItem(text)));
+      });
+    });
+    (state.pool || []).forEach(text => addItemToPool(text));
+    applyMode();
+  }
+
+  /* ---------- Mode ---------- */
+  const modeFab = document.getElementById('modeFab');
+
+  function applyMode(){
+    document.body.classList.toggle('mode-move', mode === 'move');
+    document.body.classList.toggle('mode-edit', mode === 'edit');
+    const editable = mode === 'edit';
+    titleEl.contentEditable = editable ? 'true' : 'false';
+    document.querySelectorAll('.tier-label .name, .item .txt').forEach(el => {
+      el.contentEditable = editable ? 'true' : 'false';
+    });
+    modeFab.textContent = editable ? '✏️' : '✋';
+    modeFab.classList.toggle('edit-active', editable);
+    modeFab.setAttribute('aria-label', editable ? '編集モード中（タップで移動モードに切り替え）' : '移動モード中（タップで編集モードに切り替え）');
+    document.getElementById('hintText').textContent = HINTS[mode];
+    if(editable) deselectAll();
+  }
+
+  modeFab.addEventListener('click', () => {
+    const wasEditing = document.activeElement && document.activeElement !== document.body;
+    mode = (mode === 'move') ? 'edit' : 'move';
+    applyMode();
+    if(mode === 'move' && wasEditing) document.activeElement.blur();
+  });
+
+  document.getElementById('addTierBtn').addEventListener('click', () => addTier());
+  document.getElementById('addItemBtn').addEventListener('click', () => {
+    addItemToPool('');
+    if(mode !== 'edit'){ mode = 'edit'; applyMode(); }
+    const items = pool.querySelectorAll('.txt');
+    const last = items[items.length - 1];
+    if(last){ last.focus(); }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    showDialog({
+      message: 'すべての内容をリセットします。よろしいですか？',
+      onOk: () => {
+        deselectAll();
+        board.innerHTML = '';
+        pool.innerHTML = '';
+        init();
+        showToast('リセットしました');
+      }
+    });
+  });
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  /* ---------- Modal ---------- */
+  function showModal(){ modalOverlay.classList.add('show'); }
+  function closeModal(){ modalOverlay.classList.remove('show'); modalBody.innerHTML = ''; }
+  modalOverlay.addEventListener('click', (e) => { if(e.target === modalOverlay) closeModal(); });
+
+  /* ---------- Custom confirm / prompt dialog (native confirm/prompt are unreliable in some previews) ---------- */
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  const confirmMessage = document.getElementById('confirmMessage');
+  const confirmInputWrap = document.getElementById('confirmInputWrap');
+  const confirmInput = document.getElementById('confirmInput');
+  const confirmOkBtn = document.getElementById('confirmOkBtn');
+  const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+
+  function showDialog(opts){
+    const { message, withInput, defaultValue, onOk } = opts;
+    confirmMessage.textContent = message;
+    if(withInput){
+      confirmInputWrap.style.display = 'block';
+      confirmInput.value = defaultValue || '';
+    } else {
+      confirmInputWrap.style.display = 'none';
+    }
+    confirmOverlay.classList.add('show');
+    if(withInput){ setTimeout(() => { confirmInput.focus(); confirmInput.select(); }, 60); }
+
+    function cleanup(){
+      confirmOverlay.classList.remove('show');
+      confirmOkBtn.removeEventListener('click', onOkClick);
+      confirmCancelBtn.removeEventListener('click', onCancelClick);
+    }
+    function onOkClick(){
+      const val = withInput ? confirmInput.value : true;
+      cleanup();
+      onOk(val);
+    }
+    function onCancelClick(){ cleanup(); }
+    confirmOkBtn.addEventListener('click', onOkClick);
+    confirmCancelBtn.addEventListener('click', onCancelClick);
+  }
+
+  function fmtDate(ts){
+    const d = new Date(ts);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  /* ---------- Saved tier-list gallery ---------- */
+  function openSavedModal(){ renderSavedModal(); showModal(); }
+
+  function renderSavedModal(){
+    const list = loadJSON(SAVE_KEY);
+    let html = '<div class="modal-title"><span>保存済みティア表</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<button class="modal-primary-btn" id="saveCurrentBtn">＋ 今のティア表を保存</button>';
+    if(list.length === 0){
+      html += '<p class="empty-note">まだ保存されたティア表はありません</p>';
+    } else {
+      html += list.slice().reverse().map(item => (
+        '<div class="saved-row">' +
+          '<div class="info"><div class="t">' + escapeHtml(item.title || '無題') + '</div>' +
+          '<div class="d">' + fmtDate(item.savedAt) + '</div></div>' +
+          '<button data-open="' + item.id + '">開く</button>' +
+          '<button class="danger" data-del="' + item.id + '">削除</button>' +
+        '</div>'
+      )).join('');
+    }
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('saveCurrentBtn').addEventListener('click', () => {
+      const defaultName = titleEl.textContent.trim() || 'マイティア表';
+      showDialog({
+        message: '保存名を入力してください',
+        withInput: true,
+        defaultValue: defaultName,
+        onOk: (name) => {
+          const finalName = (name || '').trim() || defaultName;
+          const data = serializeCurrent();
+          const all = loadJSON(SAVE_KEY);
+          all.push({ id: 'save-' + Date.now(), savedAt: Date.now(), title: finalName, tiers: data.tiers, pool: data.pool });
+          if(!saveJSON(SAVE_KEY, all)){ showToast('保存容量が足りず保存できませんでした'); return; }
+          showToast('保存しました');
+          renderSavedModal();
+        }
+      });
+    });
+    modalBody.querySelectorAll('[data-open]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const all = loadJSON(SAVE_KEY);
+        const found = all.find(x => x.id === btn.dataset.open);
+        if(!found) return;
+        showDialog({
+          message: '今の内容は消えます。「' + (found.title || '無題') + '」を開きますか？',
+          onOk: () => {
+            loadState(found);
+            closeModal();
+            showToast('開きました');
+          }
+        });
+      });
+    });
+    modalBody.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showDialog({
+          message: 'このティア表を削除しますか？',
+          onOk: () => {
+            saveJSON(SAVE_KEY, loadJSON(SAVE_KEY).filter(x => x.id !== btn.dataset.del));
+            renderSavedModal();
+          }
+        });
+      });
+    });
+  }
+
+  /* ---------- Groups ---------- */
+  function openGroupsModal(){ renderGroupsModal(); showModal(); }
+
+  function renderGroupsModal(){
+    const groups = loadJSON(GROUP_KEY);
+    let html = '<div class="modal-title"><span>グループから作成</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<button class="modal-primary-btn" id="newGroupBtn">＋ 新しいグループを作る</button>';
+    if(groups.length === 0){
+      html += '<p class="empty-note">まだグループがありません</p>';
+    } else {
+      html += groups.slice().reverse().map(g => (
+        '<div class="saved-row">' +
+          '<div class="info"><div class="t">' + escapeHtml(g.name || '無題') + '</div>' +
+          '<div class="d">' + (g.items || []).length + '個のアイテム</div></div>' +
+          '<button data-use="' + g.id + '">作成</button>' +
+          '<button class="danger" data-delg="' + g.id + '">削除</button>' +
+        '</div>'
+      )).join('');
+    }
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('newGroupBtn').addEventListener('click', renderGroupForm);
+    modalBody.querySelectorAll('[data-use]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const groups = loadJSON(GROUP_KEY);
+        const g = groups.find(x => x.id === btn.dataset.use);
+        if(!g) return;
+        showDialog({
+          message: '今の内容は消えて、「' + g.name + '」のアイテムで新しいティア表を作ります。よろしいですか？',
+          onOk: () => {
+            deselectAll();
+            board.innerHTML = '';
+            pool.innerHTML = '';
+            titleEl.textContent = g.name || '';
+            DEFAULT_TIERS.forEach(t => addTier(t.name, t.color));
+            (g.items || []).forEach(text => addItemToPool(text));
+            mode = 'edit';
+            applyMode();
+            closeModal();
+            showToast('グループから作成しました。名前を修正したら、移動モードで並べ替えできます');
+          }
+        });
+      });
+    });
+    modalBody.querySelectorAll('[data-delg]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showDialog({
+          message: 'このグループを削除しますか？',
+          onOk: () => {
+            saveJSON(GROUP_KEY, loadJSON(GROUP_KEY).filter(x => x.id !== btn.dataset.delg));
+            renderGroupsModal();
+          }
+        });
+      });
+    });
+  }
+
+  function renderGroupForm(){
+    let html = '<div class="modal-title"><span>新しいグループを作る</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<div class="form-field"><label>グループ名</label><input type="text" id="groupNameInput" placeholder="例：推しキャラ一覧"></div>';
+    html += '<div class="form-field"><label>アイテム（1行に1つずつ入力）</label><textarea id="groupItemsInput" placeholder="アイテム1\nアイテム2\nアイテム3"></textarea></div>';
+    html += '<div class="form-actions"><button id="groupCancelBtn">戻る</button><button class="primary" id="groupSaveBtn">保存</button></div>';
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('groupCancelBtn').addEventListener('click', renderGroupsModal);
+    document.getElementById('groupSaveBtn').addEventListener('click', () => {
+      const nameInput = document.getElementById('groupNameInput');
+      const itemsInput = document.getElementById('groupItemsInput');
+      const name = nameInput.value.trim();
+      const items = itemsInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+      if(!name){ showToast('グループ名を入力してください'); nameInput.focus(); return; }
+      if(items.length === 0){ showToast('アイテムを1つ以上入力してください'); itemsInput.focus(); return; }
+      const groups = loadJSON(GROUP_KEY);
+      groups.push({ id: 'group-' + Date.now(), name, items, createdAt: Date.now() });
+      if(!saveJSON(GROUP_KEY, groups)){ showToast('保存容量が足りず保存できませんでした'); return; }
+      showToast('グループを保存しました');
+      renderGroupsModal();
+    });
+  }
+
+  document.getElementById('savedListBtn').addEventListener('click', openSavedModal);
+  document.getElementById('groupsBtn').addEventListener('click', openGroupsModal);
+
+  /* ---------- Save as image ---------- */
+  function fallbackDownload(dataUrl, fileName){
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('画像を保存しました');
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    deselectAll();
+    const captureArea = document.getElementById('captureArea');
+    if(typeof html2canvas !== 'function'){
+      showToast('画像化ライブラリを読み込めませんでした。スクショをお試しください');
+      return;
+    }
+    try{
+      const canvas = await html2canvas(captureArea, {
+        backgroundColor: '#17161c',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        allowTaint: true,
+        ignoreElements: (el) => {
+          if(!el.classList) return false;
+          return el.classList.contains('tier-del') ||
+                 el.classList.contains('swatch-btn') ||
+                 el.classList.contains('rm') ||
+                 el.tagName === 'INPUT';
+        }
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const fileName = (titleEl.textContent.trim() || 'tier-list') + '.png';
+
+      if(canvas.toBlob){
+        canvas.toBlob(async (blob) => {
+          if(!blob){ fallbackDownload(dataUrl, fileName); return; }
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if(navigator.canShare && navigator.canShare({ files: [file] })){
+            try{
+              await navigator.share({ files: [file], title: fileName });
+              showToast('共有シートを開きました');
+              return;
+            }catch(e){ /* fall through to download */ }
+          }
+          fallbackDownload(dataUrl, fileName);
+        }, 'image/png');
+      } else {
+        fallbackDownload(dataUrl, fileName);
+      }
+    }catch(err){
+      console.error(err);
+      showToast('保存に失敗しました。スクショをお試しください');
+    }
+  });
+
+  function init(){
+    titleEl.textContent = 'マイティア表';
+    DEFAULT_TIERS.forEach(t => addTier(t.name, t.color));
+    DEFAULT_ITEMS.forEach(addItemToPool);
+    applyMode();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
