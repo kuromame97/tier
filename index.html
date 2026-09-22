@@ -430,6 +430,7 @@
 
   /* ---------- Roulette ---------- */
   .roulette-card{
+    position: relative;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--panel-2);
@@ -439,13 +440,21 @@
   .roulette-head{
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
+    margin-bottom: 6px;
   }
-  .roulette-title{ font-family: var(--font-display); font-weight: 700; font-size: 15px; }
-  .roulette-toggle{ font-size: 11px; color: var(--ink-dim); display: flex; align-items: center; gap: 4px; }
+  .roulette-title{ flex: 1; font-family: var(--font-display); font-weight: 700; font-size: 15px; word-break: break-word; }
+  .roulette-del{
+    flex: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,.08);
+    color: var(--ink-dim);
+    font-size: 12px;
+    padding: 0;
+  }
+  .roulette-toggle{ font-size: 11px; color: var(--ink-dim); display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
   .roulette-toggle input{ accent-color: var(--accent); }
   .roulette-result{
     font-family: var(--font-display);
@@ -1160,8 +1169,15 @@
     { title: 'ルーレット1', items: ['候補A', '候補B', '候補C'], used: [], excludeUsed: true, history: [], lastResult: null, spinning: false },
     { title: 'ルーレット2', items: ['候補X', '候補Y', '候補Z'], used: [], excludeUsed: true, history: [], lastResult: null, spinning: false },
   ];
+  let rouletteSeq = roulettes.length;
 
   function openRouletteModal(){ renderRouletteModal(); showModal(); }
+
+  function addRoulette(){
+    rouletteSeq++;
+    roulettes.push({ title: 'ルーレット' + rouletteSeq, items: [], used: [], excludeUsed: true, history: [], lastResult: null, spinning: false });
+    renderRouletteModal();
+  }
 
   function activeRouletteItems(r){
     return r.items.filter(it => !(r.excludeUsed && r.used.includes(it)));
@@ -1175,8 +1191,9 @@
     }).join('');
     let html = '<div class="roulette-head">' +
         '<span class="roulette-title">' + escapeHtml(r.title) + '</span>' +
-        '<label class="roulette-toggle"><input type="checkbox" id="rouletteExclude' + i + '" ' + (r.excludeUsed ? 'checked' : '') + '> 使用済みを除外</label>' +
+        (roulettes.length > 1 ? '<button class="roulette-del" id="rouletteDel' + i + '" aria-label="このルーレットを削除">✕</button>' : '') +
       '</div>' +
+      '<label class="roulette-toggle"><input type="checkbox" id="rouletteExclude' + i + '" ' + (r.excludeUsed ? 'checked' : '') + '> 使用済みを除外</label>' +
       '<div class="roulette-result" id="rouletteResult' + i + '">' +
         (r.lastResult ? escapeHtml(r.lastResult) : (active.length ? 'スピンして決めよう' : '候補がありません')) +
       '</div>' +
@@ -1207,6 +1224,17 @@
 
   function wireRouletteCard(i){
     const r = roulettes[i];
+    const delBtn = document.getElementById('rouletteDel' + i);
+    if(delBtn) delBtn.addEventListener('click', () => {
+      if(r.spinning){ showToast('スピン中は削除できません'); return; }
+      showDialog({
+        message: '「' + r.title + '」を削除しますか？',
+        onOk: () => {
+          roulettes.splice(i, 1);
+          renderRouletteModal();
+        }
+      });
+    });
     const exclude = document.getElementById('rouletteExclude' + i);
     if(exclude) exclude.addEventListener('change', () => {
       r.excludeUsed = exclude.checked;
@@ -1254,12 +1282,14 @@
 
   function renderRouletteModal(){
     let html = '<div class="modal-title"><span>🎡 ルーレット</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<button class="modal-primary-btn" id="addRouletteBtn">＋ ルーレットを追加</button>';
     roulettes.forEach((r, i) => {
       html += '<div class="roulette-card" id="rouletteCard' + i + '">' + renderRouletteCardInner(r, i) + '</div>';
     });
     html += '<div id="rouletteCombo">' + renderComboSection() + '</div>';
     modalBody.innerHTML = html;
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('addRouletteBtn').addEventListener('click', addRoulette);
     roulettes.forEach((r, i) => wireRouletteCard(i));
     wireCombo();
   }
