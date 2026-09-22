@@ -469,7 +469,7 @@
     color: var(--accent);
     word-break: break-word;
   }
-  .roulette-chips{ display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  .roulette-chips{ display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; }
   .roulette-chip{
     font-size: 11px;
     padding: 4px 8px;
@@ -477,8 +477,12 @@
     background: var(--panel);
     border: 1px solid var(--line);
     color: var(--ink-dim);
+    cursor: pointer;
+    user-select: none;
   }
-  .roulette-chip.used{ text-decoration: line-through; opacity: .45; }
+  .roulette-chip:active{ opacity: .7; }
+  .roulette-chip.used{ text-decoration: line-through; opacity: .45; border-color: var(--danger); }
+  .roulette-chip-hint{ font-size: 10.5px; color: var(--ink-dim); margin: 0 0 8px; }
   .roulette-history{ font-size: 11px; color: var(--ink-dim); margin-top: 8px; word-break: break-word; }
   .roulette-combo{
     border: 1px dashed var(--accent);
@@ -1180,24 +1184,25 @@
   }
 
   function activeRouletteItems(r){
-    return r.items.filter(it => !(r.excludeUsed && r.used.includes(it)));
+    return r.items.filter(it => !r.used.includes(it));
   }
 
   function renderRouletteCardInner(r, i){
     const active = activeRouletteItems(r);
-    const chips = r.items.map(it => {
-      const isUsed = r.excludeUsed && r.used.includes(it);
-      return '<span class="roulette-chip' + (isUsed ? ' used' : '') + '">' + escapeHtml(it) + '</span>';
+    const chips = r.items.map((it, idx) => {
+      const isUsed = r.used.includes(it);
+      return '<span class="roulette-chip' + (isUsed ? ' used' : '') + '" data-chip="' + idx + '">' + escapeHtml(it) + '</span>';
     }).join('');
     let html = '<div class="roulette-head">' +
         '<span class="roulette-title">' + escapeHtml(r.title) + '</span>' +
         (roulettes.length > 1 ? '<button class="roulette-del" id="rouletteDel' + i + '" aria-label="このルーレットを削除">✕</button>' : '') +
       '</div>' +
-      '<label class="roulette-toggle"><input type="checkbox" id="rouletteExclude' + i + '" ' + (r.excludeUsed ? 'checked' : '') + '> 使用済みを除外</label>' +
+      '<label class="roulette-toggle"><input type="checkbox" id="rouletteExclude' + i + '" ' + (r.excludeUsed ? 'checked' : '') + '> スピン後、結果を自動で非表示にする</label>' +
       '<div class="roulette-result" id="rouletteResult' + i + '">' +
         (r.lastResult ? escapeHtml(r.lastResult) : (active.length ? 'スピンして決めよう' : '候補がありません')) +
       '</div>' +
       '<div class="roulette-chips">' + (chips || '<span class="empty-note" style="padding:4px 0;">候補がありません</span>') + '</div>' +
+      '<p class="roulette-chip-hint">候補をタップすると表示・非表示を切り替えられます</p>' +
       '<div class="form-actions">' +
         '<button id="rouletteEdit' + i + '">編集</button>' +
         '<button id="rouletteLoad' + i + '">グループ読込</button>' +
@@ -1253,6 +1258,36 @@
     });
     const spinBtn = document.getElementById('rouletteSpin' + i);
     if(spinBtn) spinBtn.addEventListener('click', () => spinRoulette(i));
+    const card = document.getElementById('rouletteCard' + i);
+    if(card){
+      card.querySelectorAll('.roulette-chip[data-chip]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const idx = Number(chip.dataset.chip);
+          const item = r.items[idx];
+          if(item === undefined) return;
+          const isHidden = r.used.includes(item);
+          if(isHidden){
+            showDialog({
+              message: '「' + item + '」を再表示しますか？',
+              onOk: () => {
+                r.used = r.used.filter(u => u !== item);
+                refreshRouletteCard(i);
+              }
+            });
+          } else {
+            showDialog({
+              message: '「' + item + '」を非表示にしますか？',
+              onOk: () => {
+                r.used.push(item);
+                if(r.lastResult === item) r.lastResult = null;
+                refreshRouletteCard(i);
+                refreshCombo();
+              }
+            });
+          }
+        });
+      });
+    }
   }
 
   function wireCombo(){
