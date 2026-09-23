@@ -160,7 +160,7 @@
     flex-direction: column;
   }
   .lane{
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -299,6 +299,8 @@
     font-size: 16px;
     font-weight: 700;
     padding: 0;
+    touch-action: none;
+    user-select: none;
   }
   .dbtn:disabled{ opacity: .25; }
   .dbtn.ok{
@@ -746,10 +748,31 @@
     }
   }
 
-  document.getElementById('upBtn').addEventListener('click', () => handleArrow('up'));
-  document.getElementById('downBtn').addEventListener('click', () => handleArrow('down'));
-  document.getElementById('leftBtn').addEventListener('click', () => handleArrow('left'));
-  document.getElementById('rightBtn').addEventListener('click', () => handleArrow('right'));
+  function bindLongPressArrow(btn, dir){
+    let holdTimeout = null;
+    let repeatInterval = null;
+
+    function stop(){
+      if(holdTimeout){ clearTimeout(holdTimeout); holdTimeout = null; }
+      if(repeatInterval){ clearInterval(repeatInterval); repeatInterval = null; }
+    }
+
+    btn.addEventListener('pointerdown', (e) => {
+      if(btn.disabled) return;
+      e.preventDefault();
+      stop();
+      handleArrow(dir);
+      holdTimeout = setTimeout(() => {
+        repeatInterval = setInterval(() => handleArrow(dir), 150);
+      }, 1000);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(evt => btn.addEventListener(evt, stop));
+  }
+
+  bindLongPressArrow(document.getElementById('upBtn'), 'up');
+  bindLongPressArrow(document.getElementById('downBtn'), 'down');
+  bindLongPressArrow(document.getElementById('leftBtn'), 'left');
+  bindLongPressArrow(document.getElementById('rightBtn'), 'right');
   document.getElementById('okBtn').addEventListener('click', () => deselectAll());
 
   /* ---------- Items ---------- */
@@ -1079,6 +1102,7 @@
           '<div class="info"><div class="t">' + escapeHtml(g.name || '無題') + '</div>' +
           '<div class="d">' + (g.items || []).length + '個のアイテム</div></div>' +
           '<button data-edit="' + g.id + '">編集</button>' +
+          '<button data-dup="' + g.id + '">複製</button>' +
           '<button data-use="' + g.id + '">作成</button>' +
           '<button class="danger" data-delg="' + g.id + '">削除</button>' +
         '</div>'
@@ -1095,26 +1119,24 @@
         renderGroupForm(g);
       });
     });
+    modalBody.querySelectorAll('[data-dup]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const groups = loadJSON(GROUP_KEY);
+        const g = groups.find(x => x.id === btn.dataset.dup);
+        if(!g) return;
+        const copy = { id: 'group-' + Date.now(), name: (g.name || '無題') + 'のコピー', items: (g.items || []).slice(), createdAt: Date.now() };
+        groups.push(copy);
+        if(!saveJSON(GROUP_KEY, groups)){ showToast('保存容量が足りず保存できませんでした'); return; }
+        showToast('複製しました');
+        renderGroupsModal();
+      });
+    });
     modalBody.querySelectorAll('[data-use]').forEach(btn => {
       btn.addEventListener('click', () => {
         const groups = loadJSON(GROUP_KEY);
         const g = groups.find(x => x.id === btn.dataset.use);
         if(!g) return;
-        showDialog({
-          message: '今の内容は消えて、「' + g.name + '」のアイテムで新しいティア表を作ります。よろしいですか？',
-          onOk: () => {
-            deselectAll();
-            board.innerHTML = '';
-            pool.innerHTML = '';
-            titleEl.textContent = g.name || '';
-            DEFAULT_TIERS.forEach(t => addTier(t.name, t.color));
-            (g.items || []).forEach(text => addItemToPool(text));
-            mode = 'edit';
-            applyMode();
-            closeModal();
-            showToast('グループから作成しました。名前を修正したら、移動モードで並べ替えできます');
-          }
-        });
+        renderGroupUseChoice(g);
       });
     });
     modalBody.querySelectorAll('[data-delg]').forEach(btn => {
@@ -1126,6 +1148,39 @@
             renderGroupsModal();
           }
         });
+      });
+    });
+  }
+
+  function renderGroupUseChoice(g){
+    let html = '<div class="modal-title"><span>「' + escapeHtml(g.name || '無題') + '」を使う</span><button class="modal-close" id="modalCloseBtn">✕</button></div>';
+    html += '<p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px;">このグループのアイテムをどう使いますか？</p>';
+    html += '<div class="form-actions" style="margin-bottom:8px;"><button class="primary" id="groupAddBtn">＋ 今のアイテムに追加</button></div>';
+    html += '<div class="form-actions" style="margin-bottom:8px;"><button id="groupOverwriteBtn">上書きして新規作成</button></div>';
+    html += '<div class="form-actions"><button id="groupUseCancelBtn">戻る</button></div>';
+    modalBody.innerHTML = html;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('groupUseCancelBtn').addEventListener('click', renderGroupsModal);
+    document.getElementById('groupAddBtn').addEventListener('click', () => {
+      (g.items || []).forEach(text => addItemToPool(text));
+      closeModal();
+      showToast('「' + (g.name || '無題') + '」のアイテムを追加しました');
+    });
+    document.getElementById('groupOverwriteBtn').addEventListener('click', () => {
+      showDialog({
+        message: '今の内容は消えて、「' + (g.name || '無題') + '」のアイテムで新しいティア表を作ります。よろしいですか？',
+        onOk: () => {
+          deselectAll();
+          board.innerHTML = '';
+          pool.innerHTML = '';
+          titleEl.textContent = g.name || '';
+          DEFAULT_TIERS.forEach(t => addTier(t.name, t.color));
+          (g.items || []).forEach(text => addItemToPool(text));
+          mode = 'edit';
+          applyMode();
+          closeModal();
+          showToast('グループから作成しました。名前を修正したら、移動モードで並べ替えできます');
+        }
       });
     });
   }
